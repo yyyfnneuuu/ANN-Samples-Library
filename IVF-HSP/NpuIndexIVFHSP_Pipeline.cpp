@@ -5,7 +5,7 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImplL1(AscendTensor<float, DIMS_2>& queries
                                             AscendTensor<float16_t, DIMS_2>& queryCodes,
                                             AscendTensor<uint16_t, DIMS_2>& l1KIndiceNpu) {
     APP_LOG_INFO("Running L1 Search Pipeline...");
-    // ... 调用 RunL1DistOp 和 RunL1TopKOp 的具体实现 ...
+    // 调用 RunL1DistOp 和 RunL1TopKOp 的具体实现
     aclrtSynchronizeStream(defaultStream);
     aclrtSynchronizeStream(aiCpuStream);
     return APP_ERR_OK;
@@ -17,7 +17,7 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImplL2(AscendTensor<float16_t, DIMS_2>& que
                                             AscendTensor<uint64_t, DIMS_2>& addressOffsetOfBucketL3,
                                             AscendTensor<uint64_t, DIMS_2>& idAdressL3) {
     APP_LOG_INFO("Running L2 Search Pipeline...");
-    // ... 调用 RunL2DistOp 和 RunL2TopKOp 的具体实现 ...
+    // 调用 RunL2DistOp 和 RunL2TopKOp 的具体实现
     aclrtSynchronizeStream(defaultStream);
     aclrtSynchronizeStream(aiCpuStream);
     return APP_ERR_OK;
@@ -30,7 +30,7 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImplL2(AscendTensor<uint8_t, DIMS_1>& maskB
                                             AscendTensor<uint64_t, DIMS_2>& addressOffsetOfBucketL3,
                                             AscendTensor<uint64_t, DIMS_2>& idAdressL3) {
     APP_LOG_INFO("Running L2 Search Pipeline with Mask...");
-    // ... 调用 RunL2DistOp 和 RunL2TopKWithMaskOp 的具体实现 ...
+    // 调用 RunL2DistOp 和 RunL2TopKWithMaskOp 的具体实现
     aclrtSynchronizeStream(defaultStream);
     aclrtSynchronizeStream(aiCpuStream);
     return APP_ERR_OK;
@@ -42,7 +42,7 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImplMultiL2(AscendTensor<float16_t, DIMS_2>
                                                  AscendTensor<uint16_t, DIMS_2>& l1KIndicesNpu,
                                                  AscendTensor<uint64_t, DIMS_2>& indicesL2) {
     APP_LOG_INFO("Running Multi-Index L2 Search Pipeline...");
-    // ... 调用 RunL2DistOp 和 RunMultiL2TopKOp 的具体实现 ...
+    // 调用 RunL2DistOp 和 RunMultiL2TopKOp 的具体实现
     aclrtSynchronizeStream(defaultStream);
     aclrtSynchronizeStream(aiCpuStream);
     return APP_ERR_OK;
@@ -56,21 +56,8 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImplL3(AscendTensor<float16_t, DIMS_2>& que
                                             AscendTensor<float16_t, DIMS_2>& outDists,
                                             AscendTensor<int64_t, DIMS_2>& outIndices) {
     APP_LOG_INFO("Running L3 Search Pipeline...");
-    // ... 根据 maskFlag 调用 RunL3DistOp/RunL3DistWithMaskOp 和 RunL3TopKOp 的具体实现 ...
+    // RunL3DistOp/RunL3DistWithMaskOp 和 RunL3TopKOp 的具体实现
     aclrtSynchronizeStream(defaultStream);
     aclrtSynchronizeStream(aiCpuStream);
-    return APP_ERR_OK;
-}
-
-// L3 流水线（多索引）
-APP_ERROR NpuIndexIVFHSP::SearchBatchImplMultiL3(const std::vector<NpuIndexIVFHSP*>& indexes, int i,
-                                                 AscendTensor<float16_t, DIMS_2>& queryCodes,
-                                                 AscendTensor<uint64_t, DIMS_3>& addressOffsetOfBucketL3,
-                                                 AscendTensor<uint64_t, DIMS_3>& idAddressOfBucketL3,
-                                                 AscendTensor<float16_t, DIMS_3>& distResult,
-                                                 AscendTensor<float16_t, DIMS_3>& vcMinDistResult,
-                                                 AscendTensor<uint16_t, DIMS_3>& opFlag) {
-    APP_LOG_INFO("Running Multi-Index L3 Distance Calculation...");
-    // ... 根据 maskFlag 调用 RunMultiL3DistOp/RunMultiL3DistWithMaskOp 的具体实现 ...
     return APP_ERR_OK;
 }

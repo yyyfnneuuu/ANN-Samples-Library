@@ -60,7 +60,6 @@ APP_ERROR NpuIndexIVFHSP::Search(const std::vector<NpuIndexIVFHSP*>& indexes, si
     size_t totalSize = nq * static_cast<size_t>(indexes[0]->dim) * sizeof(float);
     size_t totalOutSize = nq * static_cast<size_t>(topK) * (sizeof(uint16_t) + sizeof(uint64_t));
 
-    // 使用第一个索引作为代理来调用非静态的 SearchImpl
     NpuIndexIVFHSP& proxy = *indexes[0];
 
     if (totalSize > SEARCH_PAGE_SIZE || nq > SEARCH_VEC_SIZE || totalOutSize > SEARCH_PAGE_SIZE) {

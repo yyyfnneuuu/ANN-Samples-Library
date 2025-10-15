@@ -8,7 +8,6 @@
 #include <future>
 #include <algorithm>
 
-// 错误码定义
 using APP_ERROR = int;
 #define APP_ERR_OK 0
 #define APP_ERR_INNER_ERROR -1
@@ -16,7 +15,7 @@ using APP_ERROR = int;
 // 内存维度
 enum Dims { DIMS_1, DIMS_2, DIMS_3 };
 
-// ACL/Ascend NPU 相关API的占位符
+// ACL/Ascend NPU 相关API
 #define ACL_MEMCPY_HOST_TO_DEVICE 1
 #define ACL_MEMCPY_DEVICE_TO_HOST 2
 #define ACL_SUCCESS 0
@@ -24,7 +23,7 @@ inline int aclrtMemcpy(void* dst, size_t destMax, const void* src, size_t count,
 inline int aclrtSynchronizeStream(void* stream) { return 0; }
 #define ACL_REQUIRE_OK(err) if(err != 0) throw std::runtime_error("ACL error");
 
-// 日志和断言宏的占位符
+// 日志和断言宏
 #define APP_LOG_INFO(msg) std::cout << "INFO: " << msg << std::endl
 #define APPERR_RETURN_IF(cond, err, msg) if(cond) return err
 #define APPERR_RETURN_IF_NOT_FMT(cond, err, fmt, ...) if(!(cond)) return err
@@ -35,7 +34,7 @@ inline int aclrtSynchronizeStream(void* stream) { return 0; }
 struct MemoryManager {};
 struct Resources { MemoryManager& getMemoryManager() { static MemoryManager mm; return mm; }};
 struct SearchParam { int nProbeL1; int nProbeL2; int l3SegmentNum; };
-struct OpAttrs {}; // 算子属性
+struct OpAttrs {};
 template<typename T, Dims D> class AscendTensor { /* ... implementation ... */ };
 class ThreadPool {
 public:

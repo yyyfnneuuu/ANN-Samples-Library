@@ -20,7 +20,7 @@ void NpuIndexIVFHSP::SearchImpl(int n, const float* x, int k, float* distances, 
         }
     }
 
-    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); /* Simplified conversion */ });
+    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); });
 }
 
 // 单索引带掩码实现
@@ -36,7 +36,7 @@ void NpuIndexIVFHSP::SearchImpl(int n, const uint8_t* mask, const float* x, int 
 
     size_t searchCnt = 0;
     std::vector<float16_t> distHalf(n * k);
-    int batchSize = 1; // Masking search may have different batching logic
+    int batchSize = 1;
     while (n - searchCnt >= batchSize) {
         AscendTensor<float, DIMS_2> queryTmpNpu(queryNpu.data() + searchCnt * dim, {batchSize, dim});
         AscendTensor<uint8_t, DIMS_1> maskBitTmpNpu(maskBitNpu.data() + searchCnt * ((ntotal + 7) / 8), {static_cast<int>(batchSize * (ntotal + 7) / 8)});
@@ -45,7 +45,7 @@ void NpuIndexIVFHSP::SearchImpl(int n, const uint8_t* mask, const float* x, int 
         searchCnt += batchSize;
     }
 
-    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); /* Simplified conversion */ });
+    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); });
 }
 
 // 多索引实现
@@ -71,7 +71,7 @@ void NpuIndexIVFHSP::SearchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int
         }
     }
 
-    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); /* Simplified conversion */ });
+    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); });
 }
 
 // 多索引带掩码实现
@@ -96,5 +96,5 @@ void NpuIndexIVFHSP::SearchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int
         searchCnt += batchSize;
     }
 
-    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); /* Simplified conversion */ });
+    std::transform(distHalf.begin(), distHalf.end(), distances, [](float16_t temp) { return static_cast<float>(temp); });
 }

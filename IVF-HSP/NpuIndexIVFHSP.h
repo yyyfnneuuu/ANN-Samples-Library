@@ -6,9 +6,6 @@
 class NpuIndexIVFHSP {
 public:
 
-    /**
-     * @brief 构造函数
-     */
     NpuIndexIVFHSP(int dim, int ntotal);
 
     /**
@@ -60,26 +57,24 @@ private:
     AscendTensor<uint8_t, DIMS_1>* maskByteNpu;
     std::vector<uint8_t> maskByteCpu;
 
-    // --- 辅助函数 ---
     size_t GetSearchPagedSize(size_t nq, int topK) const;
     static APP_ERROR ResetMultiL3TopKOp(int indexSize);
     std::vector<int64_t> GetIdMap() const; // 占位符
 
-    // --- 实现函数 ---
+    // 实现函数
     void SearchImpl(int n, const float* x, int k, float* distances, int64_t* labels);
     void SearchImpl(int n, const uint8_t* mask, const float* x, int k, float* distances, int64_t* labels);
 
-    // 静态成员函数需要一个实例来访问非静态成员，这里将其改为非静态
     void SearchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int n, const float* x, int k, float* distances, int64_t* labels, bool merge);
     void SearchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int n, const uint8_t* mask, const float* x, int k, float* distances, int64_t* labels, bool merge);
 
-    // --- 批处理核心逻辑 ---
+    // 批处理
     APP_ERROR SearchBatchImpl(int n, AscendTensor<float, DIMS_2>& queryNpu, int k, float16_t* distances, int64_t* labels);
     APP_ERROR SearchBatchImpl(int n, AscendTensor<uint8_t, DIMS_1>& maskBitNpu, AscendTensor<float, DIMS_2>& queryNpu, int k, float16_t* distances, int64_t* labels);
     APP_ERROR SearchBatchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int n, AscendTensor<float, DIMS_2>& queryNpu, int k, float16_t* distances, int64_t* labels, bool merge);
     APP_ERROR SearchBatchImpl(const std::vector<NpuIndexIVFHSP*>& indexes, int n, const uint8_t* mask, AscendTensor<float, DIMS_2>& queryNpu, int k, float16_t* distances, int64_t* labels, bool merge);
 
-    // --- L1/L2/L3 流水线阶段 ---
+    // L1/L2/L3 流水线
     APP_ERROR SearchBatchImplL1(AscendTensor<float, DIMS_2>& queriesNpu, AscendTensor<float16_t, DIMS_2>& queryCodes, AscendTensor<uint16_t, DIMS_2>& l1KIndiceNpu);
     APP_ERROR SearchBatchImplL2(AscendTensor<float16_t, DIMS_2>& queryCodesNpu, AscendTensor<uint16_t, DIMS_2>& l1KIndicesNpu, AscendTensor<uint64_t, DIMS_2>& addressOffsetOfBucketL3, AscendTensor<uint64_t, DIMS_2>& idAdressL3);
     APP_ERROR SearchBatchImplL2(AscendTensor<uint8_t, DIMS_1>& maskBitNpu, AscendTensor<float16_t, DIMS_2>& queryCodesNpu, AscendTensor<uint16_t, DIMS_2>& l1KIndicesNpu, AscendTensor<uint64_t, DIMS_2>& addressOffsetOfBucketL3, AscendTensor<uint64_t, DIMS_2>& idAdressL3);
@@ -87,13 +82,8 @@ private:
     APP_ERROR SearchBatchImplL3(AscendTensor<float16_t, DIMS_2>& queryCodes, AscendTensor<uint64_t, DIMS_2>& addressOffsetOfBucketL3, AscendTensor<uint64_t, DIMS_2>& idAddressOfBucketL3, AscendTensor<float16_t, DIMS_2>& outDists, AscendTensor<int64_t, DIMS_2>& outIndices);
     APP_ERROR SearchBatchImplMultiL3(const std::vector<NpuIndexIVFHSP*>& indexes, int i, AscendTensor<float16_t, DIMS_2>& queryCodes, AscendTensor<uint64_t, DIMS_3>& addressOffsetOfBucketL3, AscendTensor<uint64_t, DIMS_3>& idAddressOfBucketL3, AscendTensor<float16_t, DIMS_3>& distResult, AscendTensor<float16_t, DIMS_3>& vcMinDistResult, AscendTensor<uint16_t, DIMS_3>& opFlag);
 
-    // --- Host端并行计算任务 ---
-    bool CalculateOffsetL3(const std::vector<NpuIndexIVFHSP*>& indexes, int n, int indexId, const std::vector<uint64_t>& labelL2Cpu, std::vector<uint64_t>& outOffset, std::vector<uint64_t>& outIdsOffset);
-    bool CalculateOffsetL3WithMask(const std::vector<NpuIndexIVFHSP*>& indexes, int n, const uint8_t* mask, int indexId, const std::vector<uint64_t>& labelL2Cpu, std::vector<uint64_t>& outOffset, std::vector<uint64_t>& outIdsOffset);
-
     // --- NPU算子执行的封装 (占位符) ---
     void RunL1DistOp(int, AscendTensor<float, DIMS_2>&, AscendTensor<float, DIMS_2>&, AscendTensor<float16_t, DIMS_2>&, AscendTensor<float16_t, DIMS_2>&, AscendTensor<uint16_t, DIMS_2>&);
-    // ... 其他 Run*Op 方法声明
 };
 
 #endif // NPU_INDEX_IVFHSP_H
