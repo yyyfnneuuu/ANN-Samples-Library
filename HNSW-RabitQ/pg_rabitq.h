@@ -34,7 +34,7 @@ typedef struct RabitqMetaPageData
     uint16      padded_dim; // FHT旋转后的对齐维度
     uint8       m;
     uint8       total_bits; // RabitQ总比特数
-    // ... 其他元数据
+    // 其他元数据
     BlockNumber entryBlkno;
     OffsetNumber entryOffno;
     int32       entryLevel;

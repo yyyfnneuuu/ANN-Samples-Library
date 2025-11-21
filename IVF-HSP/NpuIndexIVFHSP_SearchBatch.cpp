@@ -93,10 +93,10 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImpl(const std::vector<NpuIndexIVFHSP*>& in
             CalculateOffsetL3(indexes, n, i, labelL2Cpu, outOffset, outIdsOffset);
 
             // 将计算好的地址偏移拷贝到Device上对应的Tensor slice
-            AscendTensor<uint64_t, DIMS_2> addrSlice(addressOffsetL3.data() + i * n * ..., {n, ...});
-            AscendTensor<uint64_t, DIMS_2> idSlice(idAdressL3.data() + i * n * ..., {n, ...});
-            aclrtMemcpy(addrSlice.data(), ..., outOffset.data(), ..., ACL_MEMCPY_HOST_TO_DEVICE);
-            aclrtMemcpy(idSlice.data(), ..., outIdsOffset.data(), ..., ACL_MEMCPY_HOST_TO_DEVICE);
+            AscendTensor<uint64_t, DIMS_2> addrSlice(addressOffsetL3.data() + i * n , {n});
+            AscendTensor<uint64_t, DIMS_2> idSlice(idAdressL3.data() + i * n , {n});
+            aclrtMemcpy(addrSlice.data(), outOffset.data(), ACL_MEMCPY_HOST_TO_DEVICE);
+            aclrtMemcpy(idSlice.data(), outIdsOffset.data(), ACL_MEMCPY_HOST_TO_DEVICE);
             return true;
         }));
     }
@@ -104,8 +104,8 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImpl(const std::vector<NpuIndexIVFHSP*>& in
 
     // 异步下发所有索引的L3距离计算任务
     for (int i = 0; i < indexSize; ++i) {
-        AscendTensor<uint64_t, DIMS_2> addrSlice(addressOffsetL3.data() + i * n * ..., {n, ...});
-        AscendTensor<uint64_t, DIMS_2> idSlice(idAdressL3.data() + i * n * ..., {n, ...});
+        AscendTensor<uint64_t, DIMS_2> addrSlice(addressOffsetL3.data() + i * n , {n});
+        AscendTensor<uint64_t, DIMS_2> idSlice(idAdressL3.data() + i * n , {n});
         AscendTensor<float16_t, DIMS_2> distSlice(distResults.data() + i * n * k, {n, k});
         AscendTensor<int64_t, DIMS_2> labelSlice(labelResults.data() + i * n * k, {n, k});
 
@@ -119,11 +119,11 @@ APP_ERROR NpuIndexIVFHSP::SearchBatchImpl(const std::vector<NpuIndexIVFHSP*>& in
         RunMergeTopKOp(distResults, labelResults, finalDists, finalLabels);
 
         // 将合并后的结果拷贝回Host
-        aclrtMemcpy(distances, ..., finalDists.data(), ..., ACL_MEMCPY_DEVICE_TO_HOST);
-        aclrtMemcpy(labels, ..., finalLabels.data(), ..., ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(distances, finalDists.data(), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(labels, finalLabels.data(), ACL_MEMCPY_DEVICE_TO_HOST);
     } else {
-        aclrtMemcpy(distances, ..., distResults.data(), ..., ACL_MEMCPY_DEVICE_TO_HOST);
-        aclrtMemcpy(labels, ..., labelResults.data(), ..., ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(distances, distResults.data(), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(labels, labelResults.data(), ACL_MEMCPY_DEVICE_TO_HOST);
     }
 
     aclrtSynchronizeStream(defaultStream);

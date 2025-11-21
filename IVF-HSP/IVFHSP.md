@@ -3,11 +3,11 @@ NPU-Accelerated Vector Search (IVF-HSP)
 1. 概述
 本项目提供了一个基于 NPU (神经网络处理单元) 的向量相似度检索库。它专门为在海量向量数据集中执行低延迟、高吞吐的检索而设计。
 该实现的核心是 IVF-HSP (Inverted File with Hierarchical Subspace Pursuit) 算法，这是一种分层搜索策略，能够有效利用 NPU 的Cube计算能力，在保证高召回率的同时，大幅减少搜索范围和计算量。
-代码将复杂的搜索流程拆分为独立的、可维护的模块，从接收查询到返回结果的完整端到端流水线。
+代码将复杂的搜索流程拆分为独立的模块，从接收查询到返回结果的完整端到端流水线。
 
 2. 核心特性
 NPU硬件加速: 充分利用昇腾Cube硬件的强大算力，为距离计算和排序等密集型任务提供加速。
-分层搜索算法: 通过 L1-L2-L3 三级流水线，逐步缩小搜索空间，实现了效率和精度的平衡。
+分层搜索算法: 通过 L0-L1-L2 三级流水线，逐步缩小搜索空间，实现了效率和精度的平衡。
 多种搜索模式:
 单索引/多索引检索: 支持对单个或多个索引同时进行检索。
 结果合并: 在多索引检索时，可选择将多个来源的结果进行归并排序，返回全局 Top-K。
@@ -80,7 +80,7 @@ float* queryData = new float[nq * dim];
 uint8_t* mask = new uint8_t[nq * ((ntotal + 7) / 8)];
 float* dists = new float[nq * topK];
 int64_t* labels = new int64_t[nq * topK];
-// 填充 queryData 和 mask ...
+// 填充 queryData 和 mask
 index->Search(nq, mask, queryData, topK, dists, labels);
 // 清理内存
 }

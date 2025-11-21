@@ -1,9 +1,9 @@
-// 将RabitQ的C++实现（包括FHT旋转和标量量化）适配PG的数据类型
+// 将RabitQ的FHT和标量量化适配PG的数据类型
 #pragma once
-#include "vector.h" // datavec的vector类型
+#include "vector.h"
 #include "pg_rabitq.h"
 
-// FHT旋转器状态
+// FHT旋转器
 typedef struct FhtRotator FhtRotator;
 
 FhtRotator* CreateFhtRotator(int dim, int padded_dim);

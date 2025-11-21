@@ -1,9 +1,7 @@
-// 本文件将 rabitqlib C++ 库中的核心算法，特别是FHT旋转和RabitQ量化，
-// 用纯 C 语言适配到 PostgreSQL 内核扩展的环境中。
 // 关键改动点：
 // 1. 移除了 Eigen 库依赖，所有矩阵和向量操作都通过指针和循环实现。
-// 2. 移除了 C++ 的类、模板和标准库容器，改用 struct 和 palloc/pfree 进行内存管理。
-// 3. 算法逻辑（如 FHT 的蝶形运算、RabitQ 的因子计算）保持不变。
+// 2. palloc/pfree 进行内存管理。
+// 3. 算法逻辑（FHT、RabitQ 的因子计算）。
 
 #include "postgres.h"
 #include "fmgr.h"
@@ -42,7 +40,6 @@ static inline void fht_butterfly(float* a, float* b) {
 }
 
 // 针对不同维度的FHT实现
-// 这里只实现C语言版本，待SIMD优化NEON/AVX优化
 static void fht_float_6(float* data) {
     // dim = 64
     for (int i = 0; i < 64; i += 2) fht_butterfly(&data[i], &data[i+1]);
@@ -53,7 +50,7 @@ static void fht_float_6(float* data) {
     for (int j = 0; j < 32; j++) fht_butterfly(&data[j], &data[j+32]);
 }
 
-// Kac's Walk 变换，用于增加FHT的随机性
+// 增加FHT的随机性
 static void kacs_walk(float* data, int len) {
     int half_len = len / 2;
     for (int i = 0; i < half_len; ++i) {
@@ -105,13 +102,11 @@ FhtRotator* CreateFhtRotator(int dim, int padded_dim) {
     int log_dim = (int)floor(log2(rotator->trunc_dim));
     switch (log_dim) {
         case 6: rotator->fht_transform = fht_float_6; break;
-            // case 7: ...
         default:
             // 支持64维 (2^6) 到 2048维 (2^11)
             if (log_dim < 6 || log_dim > 11) {
                 rotator->fht_transform = fht_float_unsupported;
             } else {
-                // 在此添加其他维度的支持
                 rotator->fht_transform = fht_float_unsupported;
             }
             break;
@@ -130,24 +125,17 @@ void RotateVector(FhtRotator* rotator, const float* in, float* out) {
         memset(temp_vec + rotator->dim, 0, sizeof(float) * (rotator->padded_dim - rotator->dim));
     }
 
-    // 2. 执行4轮FHT-Kac's Walk变换
     const uint8_t* flip_ptr = rotator->flip;
     for (int round = 0; round < 4; ++round) {
         flip_sign(flip_ptr, temp_vec, rotator->padded_dim);
         rotator->fht_transform(temp_vec);
         vec_rescale(temp_vec, rotator->trunc_dim, rotator->fac);
 
-        // 如果padded_dim > trunc_dim，RabitQ论文中描述了Kac's Walk的应用
-        // 为简化，此处我们假设padded_dim == trunc_dim，这是最常见情况
-        // if (rotator->padded_dim > rotator->trunc_dim) {
-        //     kacs_walk(temp_vec, rotator->padded_dim);
-        // }
-
         flip_ptr += rotator->padded_dim / 8;
     }
 
-    // 3. 最终缩放，这可以省略，因为它不改变距离排序
-    // vec_rescale(temp_vec, rotator->padded_dim, 0.25f);
+    // 3. 最终缩放
+    vec_rescale(temp_vec, rotator->padded_dim, 0.25f);
 
     memcpy(out, temp_vec, sizeof(float) * rotator->padded_dim);
     pfree(temp_vec);
@@ -191,8 +179,6 @@ static void one_bit_code(const float* data, const float* centroid, int dim, int*
     }
 }
 
-// 这是最核心的优化步骤，为额外的比特寻找最佳的缩放因子 t
-// 此处为了简化，我们不实现复杂的优先级队列优化，而是采用论文中描述的
 // 恒定缩放因子 t_const 的快速版本。在实际构建索引时，可以预先计算好这个t_const。
 static float faster_quantize_ex(const float* o_abs, uint8_t* code, int dim, int ex_bits, double t_const) {
     double ipnorm = 0.0;
@@ -219,10 +205,10 @@ void RabitqEncode(
         const float* rotated_vec,
         int padded_dim,
         int total_bits,
-        uint8_t* codes,     // output: 最终的量化码字 (total_bits per dim)
-        float* f_add,       // output: RabitQ因子
-        float* f_rescale,   // output: RabitQ因子
-        float* f_error      // output: RabitQ因子
+        uint8_t* codes,     // 最终的量化码字 (total_bits per dim)
+        float* f_add,
+        float* f_rescale,
+        float* f_error
 ) {
     if (total_bits < 1 || total_bits > 8) {
         elog(ERROR, "RabitQ total_bits must be between 1 and 8");
@@ -240,7 +226,7 @@ void RabitqEncode(
     one_bit_code(rotated_vec, centroid_zero, padded_dim, binary_code, residual);
 
     if (ex_bits > 0) {
-        // --- RabitQ+ (total_bits > 1) 逻辑 ---
+        // RabitQ+ (total_bits > 1) 逻辑
         uint8_t* ex_code_u8 = (uint8_t*)palloc(sizeof(uint8_t) * padded_dim);
         float* abs_residual = (float*)palloc(sizeof(float) * padded_dim);
 
@@ -253,7 +239,6 @@ void RabitqEncode(
 
         // b. ex_bits量化。使用预计算的常量t_const来加速。
         // 这个值依赖于维度和ex_bits, 实际应从外部传入或查询得到。
-        // 这里我们用一个估算值。
         double t_const_mock = 2.5 * (1 << ex_bits);
         float ipnorm_inv = faster_quantize_ex(abs_residual, ex_code_u8, padded_dim, ex_bits, t_const_mock);
 
@@ -295,7 +280,7 @@ void RabitqEncode(
         pfree(ex_code_u8);
 
     } else {
-        // --- 纯1-bit RabitQ (total_bits = 1) 逻辑 ---
+        // 纯1-bit RabitQ (total_bits = 1) 逻辑
         for (int i = 0; i < padded_dim; ++i) {
             codes[i] = (uint8_t)binary_code[i];
         }

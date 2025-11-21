@@ -1,7 +1,7 @@
 #pragma once
 #include <arm_neon.h>
 
-// 准备用于FastScan的查询向量 (lut: lookup table)
+// 准备用于FastScan的查询向量 (lut)
 void NeonFastScanPrepareQuery(const float* query_vec, int padded_dim, int total_bits, int8_t* lut);
 
 // 使用NEON指令批量计算估算距离
@@ -24,7 +24,7 @@ void NeonFastScanAccumulate(const uint8_t* packed_codes, const int8_t* lut, int 
     // NEON一次处理16个byte, 对应16个向量的某2个维度
     uint16x8_t-D- accu_lo_0 = vdupq_n_u16(0);
     uint16x8_t accu_lo_1 = vdupq_n_u16(0);
-    // ...
+
     const uint8x16_t lo_mask = vdupq_n_u8(0x0F);
 
     for (size_t i = 0; i < padded_dim / 2; i += 16) {
@@ -48,8 +48,7 @@ void NeonFastScanAccumulate(const uint8_t* packed_codes, const int8_t* lut, int 
         // 将s8扩展为s16进行累加防止溢出
         accu_lo_0 = vaddw_s8(accu_lo_0, vget_low_s8(res_lo));
         accu_lo_1 = vaddw_s8(accu_lo_1, vget_high_s8(res_lo));
-        // ... 对hi也进行同样操作 ...
     }
 
-    // ... 将所有累加器结果合并到 results ...
+    // 将所有累加器结果合并到 results
 }
