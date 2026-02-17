@@ -1,4 +1,4 @@
-"""Domain models for the CodeMate Agentic RAG showcase."""
+"""Domain models for repository indexing and retrieval."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 
-@dataclass(frozen=True)
+@dataclass
 class CodeNode:
     """A chunk-level unit in the Module-File-Symbol-Chunk hierarchy."""
 
@@ -16,6 +16,8 @@ class CodeNode:
     symbol: str
     language: str
     chunk_text: str
+    start_line: int = 1
+    end_line: int = 1
     metadata: Dict[str, str] = field(default_factory=dict)
     neighbors: List[str] = field(default_factory=list)
 

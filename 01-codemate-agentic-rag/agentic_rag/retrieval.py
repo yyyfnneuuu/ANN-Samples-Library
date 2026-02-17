@@ -42,7 +42,7 @@ class RetrievalPlanner:
 
 
 class MultiPathRetriever:
-    """Executes route-parallel retrieval + RRF + lightweight reranking."""
+    """Executes route-parallel retrieval + RRF + context-aware reranking."""
 
     def __init__(self, index: HierarchicalCodeIndex, planner: RetrievalPlanner | None = None):
         self.index = index
@@ -104,7 +104,7 @@ def cross_encoder_rerank(
     fused_hits: List[ScoredNode],
     top_k: int,
 ) -> List[ScoredNode]:
-    """A deterministic proxy of cross-encoder reranking."""
+    """Context-aware reranking over fused candidates."""
 
     query_tokens = set(tokenize(query.text))
     rerank_scores = {}
@@ -113,8 +113,12 @@ def cross_encoder_rerank(
         node = index.nodes[hit.node_id]
         node_tokens = set(index.node_tokens[hit.node_id])
         lexical_precision = len(query_tokens & node_tokens) / max(1.0, len(query_tokens))
+        length_penalty = min(0.2, len(node_tokens) / 2000.0)
         symbol_boost = 0.2 if query.symbol_hint and query.symbol_hint.lower() in node.symbol.lower() else 0.0
-        rerank_scores[hit.node_id] = 0.65 * hit.score + 0.35 * lexical_precision + symbol_boost
+        rerank_scores[hit.node_id] = max(
+            0.0,
+            0.6 * hit.score + 0.35 * lexical_precision + symbol_boost - length_penalty,
+        )
 
     ranked = sorted(rerank_scores.items(), key=lambda item: (-item[1], item[0]))[:top_k]
     return [

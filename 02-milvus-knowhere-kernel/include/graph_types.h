@@ -28,6 +28,13 @@ struct Candidate {
     bool passed_filter{true};
 };
 
+struct SearchStats {
+    std::size_t visited{0};
+    std::size_t filtered_nodes{0};
+    std::uint64_t prefetch_us{0};
+    std::uint64_t compute_us{0};
+};
+
 }  // namespace knowhere_demo
 
 #endif  // KNOWHERE_KERNEL_GRAPH_TYPES_H_

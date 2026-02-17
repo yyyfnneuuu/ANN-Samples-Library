@@ -9,6 +9,7 @@ add_library(
     opengauss_vector_core
     src/opq_rabitq.cpp
     src/diskann_scheduler.cpp
+    src/dual_engine_index.cpp
     src/versioned_graph.cpp
 )
 target_include_directories(opengauss_vector_core PUBLIC include)

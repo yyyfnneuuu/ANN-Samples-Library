@@ -21,11 +21,78 @@ std::vector<Candidate> AsyncGraphSearcher::Search(
     const SearchRequest& request,
     const NodeId entrypoint,
     const std::size_t max_visit,
-    const std::size_t batch_size) const {
+    const std::size_t batch_size,
+    SearchStats* stats) const {
+    return SearchOptimized(request, entrypoint, max_visit, batch_size, stats);
+}
+
+std::vector<Candidate> AsyncGraphSearcher::SearchBaseline(
+    const SearchRequest& request,
+    const NodeId entrypoint,
+    const std::size_t max_visit,
+    SearchStats* stats) const {
     if (graph_.empty() || entrypoint >= graph_.size() || request.query.empty()) {
         return {};
     }
 
+    SearchStats local_stats;
+    TopKReducer reducer(request.top_k);
+    std::queue<NodeId> frontier;
+    std::unordered_set<NodeId> visited;
+    frontier.push(entrypoint);
+    visited.insert(entrypoint);
+
+    while (!frontier.empty() && local_stats.visited < max_visit) {
+        const NodeId current = frontier.front();
+        frontier.pop();
+
+        const auto compute_start = std::chrono::steady_clock::now();
+        const GraphNode& node = graph_[current];
+        const bool passed = PassFilter(node.id, request);
+        const float distance = L2Distance(request.query, node.embedding);
+        const auto compute_end = std::chrono::steady_clock::now();
+
+        local_stats.compute_us +=
+            std::chrono::duration_cast<std::chrono::microseconds>(compute_end - compute_start).count();
+        local_stats.filtered_nodes += passed ? 0 : 1;
+
+        reducer.AbsorbBatch({Candidate{.id = node.id, .distance = distance, .passed_filter = passed}});
+
+        const auto prefetch_start = std::chrono::steady_clock::now();
+        const std::vector<NodeId> neighbors = PrefetchNeighbors(current);
+        const auto prefetch_end = std::chrono::steady_clock::now();
+        local_stats.prefetch_us +=
+            std::chrono::duration_cast<std::chrono::microseconds>(prefetch_end - prefetch_start).count();
+
+        for (const NodeId neighbor : neighbors) {
+            if (neighbor >= graph_.size()) {
+                continue;
+            }
+            if (visited.insert(neighbor).second) {
+                frontier.push(neighbor);
+            }
+        }
+
+        ++local_stats.visited;
+    }
+
+    if (stats) {
+        *stats = local_stats;
+    }
+    return reducer.Finalize();
+}
+
+std::vector<Candidate> AsyncGraphSearcher::SearchOptimized(
+    const SearchRequest& request,
+    const NodeId entrypoint,
+    const std::size_t max_visit,
+    const std::size_t batch_size,
+    SearchStats* stats) const {
+    if (graph_.empty() || entrypoint >= graph_.size() || request.query.empty()) {
+        return {};
+    }
+
+    SearchStats local_stats;
     TopKReducer reducer(request.top_k);
     std::queue<NodeId> frontier;
     std::unordered_set<NodeId> visited;
@@ -35,41 +102,62 @@ std::vector<Candidate> AsyncGraphSearcher::Search(
     frontier.push(entrypoint);
     visited.insert(entrypoint);
 
-    std::size_t expanded = 0;
-    while (!frontier.empty() && expanded < max_visit) {
-        const NodeId current = frontier.front();
-        frontier.pop();
-
-        std::future<std::vector<NodeId>> prefetch_future =
-            std::async(std::launch::async, &AsyncGraphSearcher::PrefetchNeighbors, this, current);
-
-        const GraphNode& node = graph_[current];
-        const float distance = L2Distance(request.query, node.embedding);
-        local_batch.push_back(Candidate{
-            .id = node.id,
-            .distance = distance,
-            .passed_filter = PassFilter(node.id, request),
-        });
-
-        const std::vector<NodeId> neighbors = prefetch_future.get();
-        for (const NodeId neighbor : neighbors) {
-            if (neighbor >= graph_.size()) {
-                continue;
-            }
-            if (visited.insert(neighbor).second) {
-                // Keep traversal connectivity even when current node is filtered out.
-                frontier.push(neighbor);
-            }
+    while (!frontier.empty() && local_stats.visited < max_visit) {
+        std::vector<NodeId> stage_nodes;
+        stage_nodes.reserve(batch_size);
+        while (!frontier.empty() && stage_nodes.size() < batch_size && local_stats.visited + stage_nodes.size() < max_visit) {
+            stage_nodes.push_back(frontier.front());
+            frontier.pop();
         }
 
-        ++expanded;
-        if (local_batch.size() >= batch_size) {
-            reducer.AbsorbBatch(local_batch);
-            local_batch.clear();
+        std::vector<std::future<std::vector<NodeId>>> prefetch_jobs;
+        prefetch_jobs.reserve(stage_nodes.size());
+
+        const auto prefetch_start = std::chrono::steady_clock::now();
+        for (const NodeId node : stage_nodes) {
+            prefetch_jobs.push_back(
+                std::async(std::launch::async, &AsyncGraphSearcher::PrefetchNeighbors, this, node));
         }
+        const auto prefetch_launch_end = std::chrono::steady_clock::now();
+
+        const auto compute_start = std::chrono::steady_clock::now();
+        for (const NodeId node_id : stage_nodes) {
+            const GraphNode& node = graph_[node_id];
+            const bool passed = PassFilter(node.id, request);
+            const float distance = L2Distance(request.query, node.embedding);
+            local_batch.push_back(Candidate{.id = node.id, .distance = distance, .passed_filter = passed});
+            local_stats.filtered_nodes += passed ? 0 : 1;
+        }
+        const auto compute_end = std::chrono::steady_clock::now();
+
+        for (std::size_t idx = 0; idx < prefetch_jobs.size(); ++idx) {
+            const std::vector<NodeId> neighbors = prefetch_jobs[idx].get();
+            for (const NodeId neighbor : neighbors) {
+                if (neighbor >= graph_.size()) {
+                    continue;
+                }
+                if (visited.insert(neighbor).second) {
+                    frontier.push(neighbor);
+                }
+            }
+        }
+        const auto prefetch_end = std::chrono::steady_clock::now();
+
+        reducer.AbsorbBatch(local_batch);
+        local_batch.clear();
+
+        local_stats.visited += stage_nodes.size();
+        local_stats.compute_us +=
+            std::chrono::duration_cast<std::chrono::microseconds>(compute_end - compute_start).count();
+        // include async launch + waiting + merge as prefetch stage cost.
+        local_stats.prefetch_us +=
+            std::chrono::duration_cast<std::chrono::microseconds>(prefetch_end - prefetch_start).count();
+        (void)prefetch_launch_end;
     }
 
-    reducer.AbsorbBatch(local_batch);
+    if (stats) {
+        *stats = local_stats;
+    }
     return reducer.Finalize();
 }
 

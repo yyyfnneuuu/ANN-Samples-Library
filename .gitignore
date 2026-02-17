@@ -2,3 +2,5 @@ build/
 **/build/
 __pycache__/
 .pytest_cache/
+.code_index/
+.tmp_index/

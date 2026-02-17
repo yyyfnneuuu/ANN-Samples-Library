@@ -1,17 +1,19 @@
-"""In-memory hierarchical index for CodeMate-style retrieval demos."""
+"""In-memory hierarchical index for repository retrieval."""
 
 from __future__ import annotations
 
 import math
 import re
+import hashlib
 from collections import Counter, defaultdict, deque
 from typing import Dict, Iterable, List, Set
 
 from .models import CodeNode, QueryContext, ScoredNode
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]{1,}")
+DENSE_DIM = 256
 
-# A tiny semantic expansion table to mimic embedding recall behavior.
+# Query expansion for domain terms commonly seen in code retrieval.
 SEMANTIC_EXPANSION = {
     "latency": {"p95", "throughput", "qps", "delay"},
     "symbol": {"identifier", "function", "method", "api"},
@@ -31,6 +33,7 @@ class HierarchicalCodeIndex:
     def __init__(self, nodes: Iterable[CodeNode]):
         self.nodes: Dict[str, CodeNode] = {node.node_id: node for node in nodes}
         self.node_tokens: Dict[str, List[str]] = {}
+        self.node_dense: Dict[str, List[float]] = {}
         self.inverted: Dict[str, Set[str]] = defaultdict(set)
         self.symbol_lookup: Dict[str, Set[str]] = defaultdict(set)
         self.graph: Dict[str, Set[str]] = defaultdict(set)
@@ -42,6 +45,7 @@ class HierarchicalCodeIndex:
             )
             tokens = tokenize(full_text)
             self.node_tokens[node.node_id] = tokens
+            self.node_dense[node.node_id] = _hashed_embedding(tokens)
             for token in set(tokens):
                 self.inverted[token].add(node.node_id)
             self.symbol_lookup[node.symbol.lower()].add(node.node_id)
@@ -58,21 +62,12 @@ class HierarchicalCodeIndex:
     def search_dense(self, query: QueryContext, top_k: int = 8) -> List[ScoredNode]:
         query_tokens = self._expand_tokens(tokenize(query.text))
         filtered_ids = self._filtered_node_ids(query)
-        candidate_ids = set()
-        for token in query_tokens:
-            candidate_ids.update(self.inverted.get(token, set()))
-        if not candidate_ids:
-            candidate_ids = filtered_ids
-        else:
-            candidate_ids &= filtered_ids
-
+        query_vector = _hashed_embedding(query_tokens)
         scored = {}
-        for node_id in candidate_ids:
-            node_tokens = set(self.node_tokens[node_id])
-            overlap = len(node_tokens & set(query_tokens))
-            score = overlap / max(1.0, len(set(query_tokens)))
+        for node_id in filtered_ids:
+            score = _cosine(query_vector, self.node_dense[node_id])
             if query.symbol_hint and query.symbol_hint.lower() in self.nodes[node_id].symbol.lower():
-                score += 0.25
+                score += 0.05
             scored[node_id] = score
 
         return self._rank("dense", scored, top_k)
@@ -181,3 +176,20 @@ class HierarchicalCodeIndex:
             ScoredNode(node_id=node_id, route=route, score=score, rank=idx + 1)
             for idx, (node_id, score) in enumerate(ranked)
         ]
+
+
+def _hashed_embedding(tokens: List[str]) -> List[float]:
+    vector = [0.0] * DENSE_DIM
+    for token in tokens:
+        digest = hashlib.sha1(token.encode("utf-8")).digest()
+        slot = int.from_bytes(digest[:4], byteorder="little", signed=False) % DENSE_DIM
+        vector[slot] += 1.0
+
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return vector
+    return [value / norm for value in vector]
+
+
+def _cosine(left: List[float], right: List[float]) -> float:
+    return sum(lhs * rhs for lhs, rhs in zip(left, right))
